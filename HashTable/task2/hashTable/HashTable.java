@@ -1,35 +1,41 @@
 package task2.hashTable;
 
+import java.util.ArrayList;
+import java.lang.Iterable;
+import java.util.Iterator;
 import java.util.LinkedList;
 
-public class HashTable <Key, Value>{
+public class HashTable <Key, Value> implements Iterable<HashTable.Item<Key, Value>>{
 
     static public class Item<Key, Value>
     {
         final private Key key;
+        private int hash;
         private Value value;
         ///------------------
-        public Item(Key key, Value value){
+        public Item(Key key, Value value, int hash){
             this.key = key;
             this.value = value;
+            this.hash = hash;
         }
 
         public Item(Item<Key, Value> item){
-            this(item.getKey(), item.getValue());
+            this(item.getKey(), item.getValue(), item.getHash());
         }
 
 
         public Value getValue(){
             return value;
         }
-
         public Key getKey(){
             return key;
         }
+        public int getHash(){ return hash;};
 
         public void setValue(Value value){
             this.value = value;
         }
+        public void setHash(int hash){ this.hash = hash;}
 
         public boolean isSameKey(Key key){
             return this.key == key;
@@ -41,7 +47,7 @@ public class HashTable <Key, Value>{
         }
     }
     //-------------------------------------------------------------------
-    private LinkedList<Item<Key,Value>> []  mas;
+    private ArrayList<LinkedList<Item<Key,Value>>>  mas;
     private int tableSize;
     private int fullness;
 
@@ -52,7 +58,9 @@ public class HashTable <Key, Value>{
     ///    ----------------------
     public HashTable(int tableSize){
         this.tableSize = tableSize;
-        this.mas = (LinkedList<Item<Key, Value>> [])new LinkedList[this.tableSize];
+        this.mas = new ArrayList<>(this.tableSize);
+        for(int i = 0; i < tableSize;++i)
+            mas.add(i, null);
         this.fullness = 0;
     }
     public HashTable(){
@@ -65,80 +73,81 @@ public class HashTable <Key, Value>{
     }
     public Value get(Key key){
         int index = hash(key) % tableSize;
-        if(mas[index] == null)
-           return null;
-        for (Item<Key, Value> cur: mas[index]){
-           if(cur.isSameKey(key))
-               return cur.getValue();
+        if(mas.get(index) == null)
+            return null;
+        for (Item<Key, Value> cur: mas.get(index)){
+            if(cur.isSameKey(key))
+                return cur.getValue();
         }
         return null;
     }
 
     public boolean find(Key key){
         int index = hash(key) % tableSize;
-        if(mas[index] == null)
-           return false;
-        for (Item<Key, Value> cur: mas[index]) {
-           if(cur.isSameKey(key))
-               return true;
+        if(mas.get(index) == null)
+            return false;
+        for (Item<Key, Value> cur: mas.get(index)) {
+            if(cur.isSameKey(key))
+                return true;
         }
         return false;
     }
-    public void add(Key key, Value value){
-        int index = hash(key) % tableSize;
-        if(mas[index] == null){
-           mas[index] = new LinkedList<> ();
-           ++fullness;
+    public boolean add(Key key, Value value){
+        if(find(key))
+            return false;
+        int hash = hash(key);
+        int index =  hash % tableSize;
+        if(mas.get(index) == null){
+            mas.set(index, new LinkedList<>());
+            ++fullness;
         }
-        for (Item<Key, Value> cur: mas[index]) {
-           if(cur.isSameKey(key)){
-               cur.setValue(value);
-               return;
-           }
-
-        }
-        mas[index].add(new Item<>(key, value));
+        mas.get(index).add(new Item<>(key, value, hash));
 
         if(isNeedResize())
-           resize();
+            resize();
+
+        return true;
     }
 
     public boolean remove(Key key){
         int index = hash(key) % tableSize;
-        if(mas[index] == null)
-           return false;
-        for (Item<Key, Value> cur: mas[index]) {
-           if(cur.isSameKey(key)) {
-               mas[index].remove(cur);
-               if(mas[index].size() == 0)
-                   mas[index] = null;
-               return true;
-           }
+        if(mas.get(index) == null)
+            return false;
+        for (Item<Key, Value> cur: mas.get(index)) {
+            if(cur.isSameKey(key)) {
+                mas.get(index).remove(cur);
+                if(mas.get(index).size() == 0)
+                    mas.set(index, null);
+                return true;
+            }
         }
         return false;
     }
+
     public int getSize(){
-    return tableSize;
+        return tableSize;
     }
 
     public void resize(){
-        LinkedList<Item<Key,Value>> []  oldMas = mas;
-        this.mas = (LinkedList<Item<Key, Value>> [])new LinkedList[this.tableSize * 2];
-        for(int i =0; i < tableSize; ++i){
-           for (Item<Key, Value> cur: oldMas[i]) {
-               add(cur.getKey(), cur.getValue());
-           }
-        }
+        ArrayList<LinkedList<Item<Key,Value>>>  oldMas = mas;
+        int oldSize = this.tableSize;
         this.tableSize *=2;
+        this.mas = new ArrayList<>(this.tableSize);
+        
+        for(int i =0; i < oldSize; ++i){
+            for (Item<Key, Value> cur: oldMas.get(i)) {
+                add(cur.getKey(), cur.getValue());
+            }
+        }
     }
 
     public void clear(){
         for ( int k = 0; k < tableSize; k++ ) {
-           if ( mas[k] == null )
-               continue;
-           for (Item<Key, Value> cur: mas[k])
-               mas[k].remove(cur);
-           mas[k] = null;
+            if ( mas.get(k) == null )
+                continue;
+            for (Item<Key, Value> cur: mas.get(k))
+                mas.get(k).remove(cur);
+            mas.set(k, null);
         }
         fullness = 0;
     }
@@ -151,6 +160,7 @@ public class HashTable <Key, Value>{
         return fullness == 0;
     }
 
+    @Override
     public Iterator iterator(){
         return new Iterator();
     }
@@ -162,13 +172,13 @@ public class HashTable <Key, Value>{
 
         int elementIndex;
         for ( int k = 0; k < tableSize; k++ ) {
-            if ( mas[k] == null )
+            if ( mas.get(k) == null )
                 continue;
             elementIndex = 0;
             sb.append("[").append(k).append("] -> {");
-            for ( Item<Key, Value> i : mas[k] ) {
+            for ( Item<Key, Value> i : mas.get(k) ) {
                 sb.append(i.toString());
-                if ( elementIndex < mas[k].size() -1 ) {
+                if ( elementIndex < mas.get(k).size() -1 ) {
                     sb.append(", ");
                 }
                 elementIndex++;
@@ -177,95 +187,75 @@ public class HashTable <Key, Value>{
         }
         return sb.toString();
     }
-    public class Iterator
+    ///----------------------------------------------------------------------
+    public class Iterator implements java.util.Iterator<Item<Key, Value>>
     {
-        private Item<Key, Value> item;
-
-        private boolean checkNext(LinkedList<Item<Key, Value>> curMas){
+        private int numberCell = -1;
+        private int numberCellInCell = -1;
+        
+        private LinkedList<HashTable.Item<Key, Value>> getCurrentMas(){
+            return HashTable.this.mas.get(numberCell);
+        }
+        
+        private Item<Key, Value> getCurrentItem() {
+            LinkedList<HashTable.Item<Key, Value>> iterMas = getCurrentMas();
+            return iterMas.get(numberCellInCell);
+        }
+        
+        private boolean checkNext(){
+            LinkedList<Item<Key, Value>> curMas = getCurrentMas();
             if(curMas.size() == 1)
                 return false;
-           int curNumber = 0;
+           Item<Key, Value> iterItem = getCurrentItem();
            for(Item<Key, Value> cur : curMas)
            {
-               if(cur.isSameKey(item.key))
-                   break;
-               ++curNumber;
+               if(cur.isSameKey(iterItem.key))
+                   return true;
            }
-           return curNumber > curMas.size();
-        }
-        private Item<Key,Value> getNext(LinkedList<Item<Key, Value>> curMas){
-            if(curMas.size() == 1)
-                return null;
-
-            boolean nextItem = false;
-            for(Item<Key, Value> cur : curMas)
-            {
-                if(nextItem)
-                    return cur;
-                if(cur.isSameKey(item.key))
-                    nextItem = true;
-
-            }
-            return null;
+           return false;
         }
 
-        private boolean checkPrevious(LinkedList<Item<Key, Value>> curMas){
+        private boolean checkPrevious(){
+            LinkedList<Item<Key, Value>> curMas = getCurrentMas();
             if(curMas.size() == 1)
                 return false;
-            int curNumber = 0;
+            Item<Key, Value> iterItem = getCurrentItem();
             for(Item<Key, Value> cur : curMas)
             {
-                if(cur.isSameKey(item.key))
-                    break;
-                ++curNumber;
+                if(cur.isSameKey(iterItem.key))
+                    return true;
             }
-            return curNumber > 0;
-        }
-
-        private Item<Key,Value> getPrevious(LinkedList<Item<Key, Value>> curMas){
-            if(curMas.size() == 1)
-                return null;
-
-            Item<Key, Value> prev = null;
-            for(Item<Key, Value> cur : curMas)
-            {
-                if(cur.isSameKey(item.key) && prev != null)
-                    return prev;
-                prev = cur;
-            }
-            return null;
+            return false;
         }
 
         //-----------------------------------------------------
-        public Iterator(Item<Key, Value> item){
-           this.item =  new Item<>(item);
-        }
         public Iterator(){
             if(isEmpty()){
-                this.item = null;
                 return;
             }
 
             for(int i = 0; i < tableSize; ++i)
             {
-                if(mas[i] == null)
+                if(mas.get(i) == null)
                     continue;
-                for(Item<Key, Value> cur : HashTable.this.mas[i])
+                LinkedList<HashTable.Item<Key, Value>> curMas = HashTable.this.mas.get(i);
+                for(int j = 0; j < curMas.size(); ++j )
                 {
-                    this.item =  new Item<>(cur);
+                    this.numberCell = i ;
+                    this.numberCellInCell = j;
                     return;
                 }
             }
         }
 
+        @Override
         public boolean hasNext(){
-            int index = hash(item.key) % tableSize;
-            if(checkNext(mas[index]))
+            if(checkNext())
                 return true;
 
-            for(int i = index+1; i < tableSize; ++i)
+            for(int i = numberCell + 1; i < tableSize; ++i)
             {
-                if(mas[i] != null)
+                if(mas.get(i) != null)
                     return true;
             }
 
@@ -273,74 +263,66 @@ public class HashTable <Key, Value>{
         }
 
         public boolean hasPrevious(){
-            int index = hash(item.key) % tableSize;
-            if(checkPrevious(mas[index]))
+            if(checkPrevious())
                 return true;
-            for(int i = index-1; i >=0; --i )
+            for(int i = numberCell - 1; i >= 0; --i )
             {
-                if(mas[i] != null)
+                if(mas.get(i) != null)
                     return true;
             }
             return false;
         }
 
-        public Iterator next(){
-            int index = hash(item.key) % tableSize;
-            Item<Key, Value> curItem = item;
-            item = getNext(mas[index]);
-            if(item == null){
-                boolean hasNext = false;
-                for(int i = index+1; i < tableSize; ++i)
-                {
-                    if(hasNext)
-                        break;
-                    if(mas[i] == null)
-                        continue;
-                    for(Item<Key, Value> cur : mas[i]){
-                        item = cur;
-                        hasNext = true;
-                    }
+        @Override
+        public Item<Key, Value> next(){
+            Item<Key, Value> iterItem = getCurrentItem();
+            boolean hasNext = false;
+            for(int i = numberCell + 1; i < tableSize; ++i)
+            {
+                if(hasNext)
+                    break;
+                if(mas.get(i) == null)
+                    continue;
+                LinkedList<HashTable.Item<Key, Value>> curMas = HashTable.this.mas.get(i);
+                for(int j = 0; j < curMas.size(); ++j){
+                    this.numberCell = i ;
+                    this.numberCellInCell = j;
+                    hasNext = true;
                 }
             }
-
-            return new Iterator(curItem);
+            return iterItem;
         }
 
-        public Iterator previous(){
-            int index = hash(item.key) % tableSize;
-            Item<Key, Value> curItem = item;
-            item = getPrevious(mas[index]);
-
-            if(item == null){
-                boolean hasPrev = false;
-                for(int i = index-1; i >=0; --i )
-                {
-                    if(hasPrev)
-                        break;
-                    if(mas[i] == null)
-                        continue;
-                    for(Item<Key, Value> cur : mas[i]){
-                        item = cur;
-                        hasPrev = true;
-                    }
+        public Item<Key, Value> previous(){
+            Item<Key, Value> iterItem = getCurrentItem();
+            boolean hasPrev = false;
+            for(int i = numberCell - 1; i >= 0; --i )
+            {
+                if(hasPrev)
+                    break;
+                if(mas.get(i) == null)
+                    continue;
+                LinkedList<HashTable.Item<Key, Value>> curMas = HashTable.this.mas.get(i);
+                for(int j = 0; j < curMas.size(); ++j){
+                    this.numberCell = i ;
+                    this.numberCellInCell = j;
+                    hasPrev = true;
                 }
             }
-            return new Iterator(curItem);
+            return iterItem;
         }
 
+        @Override
         public void remove(){
-            Item<Key, Value> curItem = item;
-            item = next().item;
-            HashTable.this.remove(curItem.key);
-        }
-
-        public void set(Item<Key, Value> newItem) {
-            item = newItem;
+            Item<Key, Value> iterItem = getCurrentItem();
+            next();
+            HashTable.this.remove(iterItem.key);
         }
 
         @Override
         public String toString(){
-            return item.toString();
+            Item<Key, Value> iterItem = getCurrentItem();
+            return iterItem.toString();
         }
     }
 }
